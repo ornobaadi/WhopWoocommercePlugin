@@ -68,7 +68,6 @@ class Whop_Subscriptions {
         $member_id  = $order->get_meta('_whop_member_id');
         $method_id  = $order->get_meta('_whop_payment_method_id');
         $payment_id = $order->get_meta('_whop_payment_id');
-        $instagram  = $order->get_meta('_order_instagram_username');
 
         if ($member_id) {
             $subscription->update_meta_data('_whop_member_id', $member_id);
@@ -79,12 +78,9 @@ class Whop_Subscriptions {
         if ($payment_id) {
             $subscription->update_meta_data('_whop_last_payment_id', $payment_id);
         }
-        if ($instagram) {
-            $subscription->update_meta_data('_order_instagram_username', $instagram);
-        }
 
         $subscription->save();
-        Whop_Logger::log("Copied Whop metadata and Instagram username '{$instagram}' from Order #{$order->get_id()} to Subscription #{$subscription->get_id()}.", 'info');
+        Whop_Logger::log("Copied Whop metadata from Order #{$order->get_id()} to Subscription #{$subscription->get_id()}.", 'info');
     }
 
     /**

@@ -48,12 +48,6 @@ function whop_woocommerce_init() {
     // Load Subscriptions Integration
     require_once WC_WHOP_PLUGIN_DIR . 'includes/class-whop-subscriptions.php';
 
-    // Load Checkout Extensions
-    require_once WC_WHOP_PLUGIN_DIR . 'includes/class-whop-checkout.php';
-
-    // Load Admin Extensions
-    require_once WC_WHOP_PLUGIN_DIR . 'includes/class-whop-admin.php';
-
     // Register Gateway with WooCommerce
     add_filter('woocommerce_payment_gateways', 'whop_woocommerce_add_gateway');
 
