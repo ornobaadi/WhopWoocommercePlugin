@@ -120,22 +120,84 @@ class WC_Gateway_Whop extends WC_Payment_Gateway {
             return array('result' => 'fail');
         }
 
-        // Prepare checkout payload
+        // Check if any product in order has a configured Whop Plan ID or URL
+        $whop_plan_or_url = '';
+        foreach ($order->get_items() as $item) {
+            $product = $item->get_product();
+            if ($product && class_exists('Whop_Product_Fields')) {
+                $plan_meta = Whop_Product_Fields::get_whop_plan_id($product);
+                if (!empty($plan_meta)) {
+                    $whop_plan_or_url = $plan_meta;
+                    break;
+                }
+            }
+        }
+
+        // If a direct Whop checkout or product URL was configured
+        if (!empty($whop_plan_or_url) && (str_starts_with($whop_plan_or_url, 'http://') || str_starts_with($whop_plan_or_url, 'https://') || str_starts_with($whop_plan_or_url, 'whop.com/'))) {
+            $checkout_url = $whop_plan_or_url;
+            if (!str_starts_with($checkout_url, 'http://') && !str_starts_with($checkout_url, 'https://')) {
+                $checkout_url = 'https://' . $checkout_url;
+            }
+
+            // Append metadata as query arguments so Whop checkouts carry the order reference back via webhooks/redirects
+            $checkout_url = add_query_arg(
+                array(
+                    'metadata[woocommerce_order_id]'    => (string) $order_id,
+                    'metadata[woocommerce_customer_id]' => (string) $order->get_customer_id(),
+                    'redirect_url'                      => urlencode($this->get_return_url($order)),
+                ),
+                $checkout_url
+            );
+
+            Whop_Logger::log("Routing Order #{$order_id} directly to configured Whop checkout URL: {$checkout_url}", 'info');
+
+            return array(
+                'result'   => 'success',
+                'redirect' => $checkout_url,
+            );
+        }
+
+        // If a Product ID or Plan ID is configured, redirect directly to Whop's recurring checkout cashier!
+        if (!empty($whop_plan_or_url)) {
+            // Whop hosted checkout URL for any product or plan
+            $target_id = $whop_plan_or_url;
+            $checkout_url = 'https://whop.com/checkout/' . urlencode($target_id);
+
+            // Attach metadata query arguments
+            $checkout_url = add_query_arg(
+                array(
+                    'metadata[woocommerce_order_id]'    => (string) $order_id,
+                    'metadata[woocommerce_customer_id]' => (string) $order->get_customer_id(),
+                    'redirect_url'                      => urlencode($this->get_return_url($order)),
+                ),
+                $checkout_url
+            );
+
+            Whop_Logger::log("Directing Order #{$order_id} to Whop recurring checkout cashier: {$checkout_url}", 'info');
+
+            return array(
+                'result'   => 'success',
+                'redirect' => $checkout_url,
+            );
+        }
+
+        // Prepare dynamic one-time checkout configuration payload for regular products
         $checkout_args = array(
-            'mode' => 'payment',
-            'plan' => array(
+            'mode'         => 'payment',
+            'redirect_url' => $this->get_return_url($order),
+            'metadata'     => array(
+                'woocommerce_order_id'    => (string) $order_id,
+                'woocommerce_customer_id' => (string) $order->get_customer_id(),
+            ),
+            'plan'         => array(
                 'initial_price' => $amount,
                 'currency'      => strtolower($currency),
                 'plan_type'     => 'one_time',
             ),
-            'redirect_url' => $this->get_return_url($order),
-            'metadata' => array(
-                'woocommerce_order_id'    => (string) $order_id,
-                'woocommerce_customer_id' => (string) $order->get_customer_id(),
-            ),
         );
 
-        Whop_Logger::log("Creating checkout configuration for Order #{$order_id}.", 'info');
+        Whop_Logger::log("Creating dynamic checkout configuration for Order #{$order_id}.", 'info');
 
         // Create Checkout Configuration in Whop API
         $response = Whop_API::create_checkout_configuration($checkout_args);

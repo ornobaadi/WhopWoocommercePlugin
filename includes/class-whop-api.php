@@ -42,7 +42,7 @@ class Whop_API {
      * @param array  $body     Request body data.
      * @return array|WP_Error  Decoded response body or WP_Error on failure.
      */
-    private static function request($endpoint, $method = 'GET', $body = array()) {
+    public static function request($endpoint, $method = 'GET', $body = array()) {
         $api_key = self::get_api_key();
 
         if (empty($api_key)) {
@@ -167,6 +167,16 @@ class Whop_API {
             'amount' => $amount,
         );
         return self::request('/payments/' . urlencode($payment_id) . '/refund', 'POST', $body);
+    }
+
+    /**
+     * Retrieve product details (including plans).
+     *
+     * @param string $product_id Product ID (e.g. prod_...).
+     * @return array|WP_Error
+     */
+    public static function retrieve_product($product_id) {
+        return self::request('/products/' . urlencode($product_id), 'GET');
     }
 
     /**

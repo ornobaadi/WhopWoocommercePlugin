@@ -48,6 +48,14 @@ function whop_woocommerce_init() {
     // Load Subscriptions Integration
     require_once WC_WHOP_PLUGIN_DIR . 'includes/class-whop-subscriptions.php';
 
+    // Load Product Custom Fields
+    require_once WC_WHOP_PLUGIN_DIR . 'includes/class-whop-product-fields.php';
+
+    // Load Plan Explorer Tool
+    if (is_admin()) {
+        require_once WC_WHOP_PLUGIN_DIR . 'includes/class-whop-plan-explorer.php';
+    }
+
     // Register Gateway with WooCommerce
     add_filter('woocommerce_payment_gateways', 'whop_woocommerce_add_gateway');
 

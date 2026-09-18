@@ -212,10 +212,38 @@ class Whop_Webhooks {
         $payment_id = isset($data['id']) ? $data['id'] : '';
         $metadata   = isset($data['metadata']) ? $data['metadata'] : array();
         $order_id   = isset($metadata['woocommerce_order_id']) ? intval($metadata['woocommerce_order_id']) : 0;
+        $member_id  = isset($data['member_id']) ? $data['member_id'] : (isset($data['member']['id']) ? $data['member']['id'] : '');
+        $payment_method_id = isset($data['payment_method_id']) ? $data['payment_method_id'] : (isset($data['payment_method']['id']) ? $data['payment_method']['id'] : '');
+
+        // If order_id is missing, attempt to find associated subscription by member_id
+        if (!$order_id && !empty($member_id) && function_exists('wcs_get_subscriptions')) {
+            $matched_subs = wcs_get_subscriptions(array(
+                'meta_key'   => '_whop_member_id',
+                'meta_value' => $member_id,
+                'limit'      => 1,
+            ));
+            if (!empty($matched_subs)) {
+                $sub = reset($matched_subs);
+                Whop_Logger::log("payment.succeeded matched existing subscription #{$sub->get_id()} via Member ID: {$member_id}.", 'info');
+                
+                // If recurring payment for existing subscription, create a renewal order
+                if (function_exists('wcs_create_renewal_order')) {
+                    $renewal_order = wcs_create_renewal_order($sub);
+                    if ($renewal_order && !is_wp_error($renewal_order)) {
+                        $renewal_order->update_meta_data('_whop_payment_id', $payment_id);
+                        $renewal_order->payment_complete($payment_id);
+                        $renewal_order->add_order_note(sprintf(__('Whop recurring renewal payment succeeded. Payment ID: %s', 'whop-woocommerce'), $payment_id));
+                        $renewal_order->save();
+                        Whop_Logger::log("Generated and completed renewal order #{$renewal_order->get_id()} for subscription #{$sub->get_id()}.", 'info');
+                        return true;
+                    }
+                }
+            }
+        }
 
         if (!$order_id) {
-            Whop_Logger::log("payment.succeeded received but woocommerce_order_id metadata is missing. Payment ID: {$payment_id}", 'error');
-            return new WP_Error('missing_order_id', 'Order ID is missing in payment metadata');
+            Whop_Logger::log("payment.succeeded received but woocommerce_order_id metadata is missing and no matching subscription found. Payment ID: {$payment_id}", 'warning');
+            return true; // Acknowledge to prevent unnecessary retries
         }
 
         $order = wc_get_order($order_id);
@@ -226,9 +254,6 @@ class Whop_Webhooks {
 
         // Save metadata on order
         $order->update_meta_data('_whop_payment_id', $payment_id);
-        
-        $member_id = isset($data['member_id']) ? $data['member_id'] : (isset($data['member']['id']) ? $data['member']['id'] : '');
-        $payment_method_id = isset($data['payment_method_id']) ? $data['payment_method_id'] : (isset($data['payment_method']['id']) ? $data['payment_method']['id'] : '');
 
         if ($member_id) {
             $order->update_meta_data('_whop_member_id', $member_id);
